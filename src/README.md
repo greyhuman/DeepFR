@@ -6,7 +6,7 @@ Requirements
     * tensorflow 1.14.0
     * PyQt 5.5.1
 
-Requirements
+Install
 
 sudo apt install python3-pip
 
