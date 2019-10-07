@@ -2,6 +2,7 @@ from . import detect_face
 
 import tensorflow as tf
 import cv2
+import numpy as np
 
 class FaceDetector:
     """Detect human face from image"""
@@ -22,11 +23,17 @@ class FaceDetector:
         min_shape = min(image.shape[1], image.shape[0])
         scale = int(min_shape / 80)
         img = cv2.resize(image, (int(image.shape[1] / scale),int(image.shape[0] / scale)))
-        raw_boxes, _ = detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
+        raw_boxes, raw_marks = detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
+
+        if len(raw_marks) > 0:
+            raw_marks = np.reshape(raw_marks, (raw_marks.shape[1], raw_marks.shape[0]))
 
         faceboxes = []
-        for box in raw_boxes:
+        landmarks = []
+        for box, marks in zip(raw_boxes, raw_marks):
             box = [box[0] * scale, box[1] * scale, box[2] * scale, box[3] * scale, box[4]]
+            lmarks = [(marks[0] * scale, marks[5] * scale), (marks[1] * scale, marks[6] * scale), (marks[2] * scale, marks[7] * scale),
+                     (marks[3] * scale, marks[8] * scale), (marks[4] * scale, marks[9] * scale)]
             # Move box down.
             diff_height_width = (box[3] - box[1]) - (box[2] - box[0])
             offset_y = int(abs(diff_height_width / 2))
@@ -37,8 +44,9 @@ class FaceDetector:
 
             if self.box_in_image(facebox, image):
                 faceboxes.append(facebox)
+                landmarks.append(lmarks)
 
-        return faceboxes
+        return faceboxes, landmarks
 
     @staticmethod
     def move_box(box, offset):

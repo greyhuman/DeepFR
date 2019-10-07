@@ -41,6 +41,8 @@ class HeadPoseEstimator:
         self.fCount = 0
         self.mCount = 0
 
+        self.mtcnn_lmarks = True # False
+
         self.sumErr = np.tile(-1, self.n_p)
         self.errCap = 30
         self.old_facebox = []
@@ -75,12 +77,12 @@ class HeadPoseEstimator:
             #mask = np.zeros_like(frame)
             self.cnt = 0
             self.fbStartCount += 1
-            self.sumErr = np.tile(0, self.n_p)
+            # self.sumErr = np.tile(0, self.n_p) # uncomment this line to enable optical flow tracker
             self.sumErr = self.sumErr.astype('float64')
             self.sumErr = np.reshape(self.sumErr, (len(self.sumErr), 1))
 
             t = time.clock()
-            faceboxes = self.face_detector.get_faceboxes(frame)
+            faceboxes, landmarks = self.face_detector.get_faceboxes(frame)
             if (len(faceboxes) > 0):
                 self.old_facebox = facebox = faceboxes[0:1]
             else:
@@ -91,25 +93,35 @@ class HeadPoseEstimator:
             if facebox is not None:
                 t = time.clock()
 
-                marks = self.mark_detector.detect_marks(frame, facebox)
-                marks = marks[0][self.p_st:self.p_end]
 
-                self.lm += time.clock() - t
+                if (self.mtcnn_lmarks == False):
+                    marks = self.mark_detector.detect_marks(frame, facebox)
+                    marks = marks[0][self.p_st:self.p_end]
 
-                self.p0 = np.array(marks)
-                self.p0 = self.p0.astype('float32')
-                self.p0 = np.reshape(self.p0, (len(self.p0), 1, 2))
+                    self.lm += time.clock() - t
 
-                # Uncomment following line to show raw marks.
-                # mark_detector.draw_marks(
-                #    frame, marks, color=(0, 255, 0))
+                    self.p0 = np.array(marks)
+                    self.p0 = self.p0.astype('float32')
+                    self.p0 = np.reshape(self.p0, (len(self.p0), 1, 2))
 
-                # Try pose estimation with 68 points.
-                t = time.clock()
-                pose = self.pose_estimator.solve_pose_by_68_points(marks)
-                self.hpe += time.clock() - t
+                    # Uncomment following line to show raw marks.
+                    self.mark_detector.draw_marks(
+                       frame, marks, color=(0, 255, 0))
 
-                self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
+                    # Try pose estimation with 68 points.
+                    t = time.clock()
+                    pose = self.pose_estimator.solve_pose_by_68_points(marks)
+                    self.hpe += time.clock() - t
+
+                    self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
+                else:
+                    if (len(landmarks) > 0):
+                        marks = np.array(landmarks[0])
+                        # Uncomment following line to show raw marks.
+                        self.mark_detector.draw_marks(
+                            frame, marks, color=(0, 255, 0))
+                        pose = self.pose_estimator.solve_pose_by_5_points(marks)
+                        self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
 
         else:
             self.cnt += 1

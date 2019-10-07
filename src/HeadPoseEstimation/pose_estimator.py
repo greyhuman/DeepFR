@@ -22,7 +22,8 @@ class PoseEstimator:
         ]) / 4.5
 
         self.model_points_68 = self._get_full_model_points()
-        self.model_points_68 = self.model_points_68[p1: p2]
+        self.model_points_p12 = self.model_points_68[p1: p2]
+        # self.model_points_68 = self.model_points_68[p1: p2]
 
         # Camera internals
         self.focal_length = self.size[1]
@@ -79,14 +80,51 @@ class PoseEstimator:
         Return (rotation_vector, translation_vector) as pose.
         """
 
+
         if self.r_vec is None:
             (_, rotation_vector, translation_vector) = cv2.solvePnP(
-                self.model_points_68, image_points, self.camera_matrix, self.dist_coeefs)
+                self.model_points_p12, image_points, self.camera_matrix, self.dist_coeefs)
             self.r_vec = rotation_vector
             self.t_vec = translation_vector
 
         (_, rotation_vector, translation_vector) = cv2.solvePnP(
-            self.model_points_68,
+            self.model_points_p12,
+            image_points,
+            self.camera_matrix,
+            self.dist_coeefs,
+            rvec=self.r_vec,
+            tvec=self.t_vec,
+            useExtrinsicGuess=True)
+
+        return (rotation_vector, translation_vector)
+
+    def solve_pose_by_5_points(self, image_points):
+        """
+        Solve pose from 5 mtcnn image points
+        Return (rotation_vector, translation_vector) as pose.
+        """
+
+        # point1 = (self.model_points_68[37] + self.model_points_68[38] + self.model_points_68[39] +     # right eye
+        #           self.model_points_68[40] + self.model_points_68[41] + self.model_points_68[42]) / 6  # center
+
+        point1 = (self.model_points_68[38] + self.model_points_68[39] +     # right eye
+                  self.model_points_68[41] + self.model_points_68[42]) / 4  # center
+
+        # point2 = (self.model_points_68[43] + self.model_points_68[44] + self.model_points_68[45] +     # left eye
+        #           self.model_points_68[46] + self.model_points_68[47] + self.model_points_68[48]) / 6  # center
+        point2 = (self.model_points_68[44] + self.model_points_68[45] +     # left eye
+                  self.model_points_68[47] + self.model_points_68[48]) / 4  # center
+        # model_points_5 = np.array(list([point1, point2, self.model_points_68[34], self.model_points_68[49], self.model_points_68[55]]))
+        model_points_5 = np.array(list([self.model_points[3], self.model_points[2], self.model_points[0], self.model_points[5], self.model_points[4]]))
+
+        if self.r_vec is None:
+            (_, rotation_vector, translation_vector) = cv2.solvePnP(
+                model_points_5, image_points, self.camera_matrix, self.dist_coeefs)
+            self.r_vec = rotation_vector
+            self.t_vec = translation_vector
+
+        (_, rotation_vector, translation_vector) = cv2.solvePnP(
+            model_points_5,
             image_points,
             self.camera_matrix,
             self.dist_coeefs,
