@@ -12,6 +12,6 @@ sudo apt install python3-pip
 
 sudo pip3 install tensorflow==1.14.0
 
-pip3 install opencv-python
+sudo pip3 install opencv-python
 
 sudo apt install python3-pyqt5 pyqt5-dev-tools
