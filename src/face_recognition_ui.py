@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import sys
+import math
 from PyQt5 import QtCore
 from PyQt5 import QtWidgets
 from PyQt5 import QtGui
@@ -12,7 +13,8 @@ class ShowVideo(QtCore.QObject):
     camera = cv2.VideoCapture(camera_port)
     VideoSignal = QtCore.pyqtSignal(QtGui.QImage)
     run_video = False
-
+    mode = 0
+    estimator = None
     def __init__(self, parent = None):
         super(ShowVideo, self).__init__(parent)
 
@@ -20,27 +22,49 @@ class ShowVideo(QtCore.QObject):
     def startVideo(self):
         self.run_video = True
         _, sample_image = self.camera.read()
-        estimator = HeadPoseEstimator(sample_image)
+
+        if self.estimator is None:
+            self.estimator = HeadPoseEstimator(sample_image)
+
         while self.run_video:
             ret, image = self.camera.read()
             if ret is False:
                 break
-            image = estimator.get_direction(image)
-            color_swapped_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            res_image = None
+            if self.mode == 0:
+                res_image = self.get_access(image)
+            elif self.mode == 1:
+                res_image = self.face_recog(image)
 
-            height, width, _ = color_swapped_image.shape
-
-            #width = camera.set(CAP_PROP_FRAME_WIDTH, 1600)
-			#height = camera.set(CAP_PROP_FRAME_HEIGHT, 1080)
-			#camera.set(CAP_PROP_FPS, 15)
-
-            qt_image = QtGui.QImage(color_swapped_image.data,
+            if res_image is not None:
+                color_swapped_image = cv2.cvtColor(res_image, cv2.COLOR_BGR2RGB)
+                height, width, _ = color_swapped_image.shape
+                qt_image = QtGui.QImage(color_swapped_image.data,
                                     width,
                                     height,
                                     color_swapped_image.strides[0],
                                     QtGui.QImage.Format_RGB888)
 
-            self.VideoSignal.emit(qt_image)
+                self.VideoSignal.emit(qt_image)
+            else:
+                break
+    def get_access(self, image):
+        image = self.estimator.get_direction(image)
+        return image
+
+    def face_recog(self, image):
+        faceboxes = self.estimator.face_detector.get_faceboxes(image)
+        facebox = faceboxes[0] if len(faceboxes) >= 1 else None
+        if facebox is not None:
+            #print(facebox)
+            cv2.rectangle(image,
+                        (int(facebox[0]), int(facebox[1])),
+                        (int(facebox[2]), int(facebox[3])), (0, 255, 0))
+            dist = math.fabs(int(facebox[0]) - int(facebox[2])) / 3
+            cv2.putText(image, "Unknown", (int(facebox[0] + dist), int(facebox[1] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (255, 0, 0),
+                        1)
+        return image
 
 
 class ImageViewer(QtWidgets.QWidget):
@@ -48,6 +72,7 @@ class ImageViewer(QtWidgets.QWidget):
         super(ImageViewer, self).__init__(parent)
         self.image = QtGui.QImage()
         self.setAttribute(QtCore.Qt.WA_OpaquePaintEvent)
+        self.fill_screen_cap()
 
 
     def paintEvent(self, event):
@@ -68,6 +93,22 @@ class ImageViewer(QtWidgets.QWidget):
             self.setFixedSize(image.size())
         self.update()
 
+    def fill_screen_cap(self):
+
+        image = np.zeros((300, 300, 3), np.uint8)
+
+        color_swapped_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        height, width, _ = color_swapped_image.shape
+
+        qimg = qt_image = QtGui.QImage(color_swapped_image.data,
+                                width,
+                                height,
+                                color_swapped_image.strides[0],
+                                QtGui.QImage.Format_RGB888)
+        self.setImage(qimg)
+
+
 class Window(QtWidgets.QMainWindow):
 
     def __init__(self):
@@ -76,9 +117,24 @@ class Window(QtWidgets.QMainWindow):
         self.image_viewer = ImageViewer()
         self.push_button1 = QtWidgets.QPushButton('Start')
         self.push_button2 = QtWidgets.QPushButton('Stop')
-        vertical_layout = QtWidgets.QVBoxLayout()
 
+        widget_1 = QtWidgets.QWidget()
+        self.comboBox = QtWidgets.QComboBox(widget_1)
+        self.comboBox.setGeometry(QtCore.QRect(80, 190, 85, 27))
+        self.comboBox.setObjectName("selectMode")
+        self.comboBox.addItem("Get access")
+        self.comboBox.addItem("Face recognition mode")
+        self.horizontal_layout = QtWidgets.QHBoxLayout(widget_1)
+        self.horizontal_layout.addWidget(self.comboBox)
+        #self.label = QtWidgets.QLabel(widget_1)
+        #self.label.setObjectName("label")
+        #self.label.setText("TEST1")
+        #self.horizontal_layout.addWidget(self.label)
+
+        vertical_layout = QtWidgets.QVBoxLayout()
         vertical_layout.addWidget(self.image_viewer)
+        vertical_layout.addWidget(widget_1)
+        vertical_layout.addWidget(self.push_button1)
         vertical_layout.addWidget(self.push_button1)
         vertical_layout.addWidget(self.push_button2)
 
@@ -103,9 +159,13 @@ class App(QtCore.QObject):
 
     def connect_signs(self):
         self.vid.VideoSignal.connect(self.gui.image_viewer.setImage)
+        self.gui.comboBox.currentIndexChanged.connect(self.change)
         self.gui.push_button1.clicked.connect(self.vid.startVideo)
         self.gui.push_button2.clicked.connect(self.stop)
 
+    def change(self, i):
+        #self.gui.label.setText(str(i))
+        self.vid.mode = i
     def stop(self):
         self.vid.run_video = False
 
