@@ -75,7 +75,7 @@ class HeadPoseEstimator:
             #mask = np.zeros_like(frame)
             self.cnt = 0
             self.fbStartCount += 1
-            self.sumErr = np.tile(0, self.n_p)
+            # self.sumErr = np.tile(0, self.n_p)
             self.sumErr = self.sumErr.astype('float64')
             self.sumErr = np.reshape(self.sumErr, (len(self.sumErr), 1))
 
@@ -101,8 +101,8 @@ class HeadPoseEstimator:
                 self.p0 = np.reshape(self.p0, (len(self.p0), 1, 2))
 
                 # Uncomment following line to show raw marks.
-                # mark_detector.draw_marks(
-                #    frame, marks, color=(0, 255, 0))
+                self.mark_detector.draw_marks(
+                   frame, marks, color=(0, 255, 0))
 
                 # Try pose estimation with 68 points.
                 t = time.clock()
