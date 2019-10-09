@@ -115,7 +115,10 @@ class PoseEstimator:
         point2 = (self.model_points_68[44] + self.model_points_68[45] +     # left eye
                   self.model_points_68[47] + self.model_points_68[48]) / 4  # center
         # model_points_5 = np.array(list([point1, point2, self.model_points_68[34], self.model_points_68[49], self.model_points_68[55]]))
-        model_points_5 = np.array(list([self.model_points[3], self.model_points[2], self.model_points[0], self.model_points[5], self.model_points[4]]))
+        # model_points_5 = np.array(list([self.model_points[3], self.model_points[2], self.model_points[0], self.model_points[5], self.model_points[4]]))
+        model_points_5 = np.array(list(
+            [point2, point1, self.model_points[0], self.model_points[5],
+             self.model_points[4]]))
 
         if self.r_vec is None:
             (_, rotation_vector, translation_vector) = cv2.solvePnP(

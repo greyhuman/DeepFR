@@ -17,7 +17,7 @@ class HeadPoseEstimator:
         self.face_detector = FaceDetector()
 
         # Introduce mark_detector to detect landmarks.
-        self.mark_detector = MarkDetector()
+        self.mark_detector = MarkDetector(saved_model=True)
 
         self.p_st = 17
         self.p_end = 56
@@ -41,7 +41,7 @@ class HeadPoseEstimator:
         self.fCount = 0
         self.mCount = 0
 
-        self.mtcnn_lmarks = True # False
+        self.mtcnn_lmarks = False
 
         self.sumErr = np.tile(-1, self.n_p)
         self.errCap = 30
@@ -91,6 +91,9 @@ class HeadPoseEstimator:
             self.fd += time.clock() - t
 
             if facebox is not None:
+                cv2.rectangle(frame,
+                              (int(facebox[0][0]), int(facebox[0][1])),
+                              (int(facebox[0][2]), int(facebox[0][3])), (0, 255, 0))
                 t = time.clock()
 
 
