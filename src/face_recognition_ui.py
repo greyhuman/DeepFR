@@ -73,12 +73,12 @@ class ShowVideo(QtCore.QObject):
     def face_recog(self, image):
         faceboxes, landmarks = self.estimator.face_detector.get_faceboxes(image)
         facebox = faceboxes[0] if len(faceboxes) >= 1 else None
-        l = landmarks[0]
-        upd_facebox = [[int(facebox[1]), int(facebox[2]), int(facebox[3]), int(facebox[0])]]
-        face_encodings = faceRecognition.face_encodings(image, l, upd_facebox)
         if facebox is not None:
-
-            matches = faceRecognition.compare_faces(self.known_face_encoding, face_encodings[0])
+            l = landmarks[0]
+            upd_facebox = [[int(facebox[1]), int(facebox[2]), int(facebox[3]), int(facebox[0])]]
+            face_encodings = faceRecognition.face_encodings(image, l, upd_facebox)
+        
+            matches = faceRecognition.compare_faces(self.known_face_encoding, face_encodings[0], 0.47)
             name = "Unknown"
 
             '''
