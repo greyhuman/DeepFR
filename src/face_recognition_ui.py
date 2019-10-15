@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import sys
 import math
+import time
 from PyQt5 import QtCore
 from PyQt5 import QtWidgets
 from PyQt5 import QtGui
@@ -14,6 +15,7 @@ class ShowVideo(QtCore.QObject):
     VideoSignal = QtCore.pyqtSignal(QtGui.QImage)
     run_video = False
     mode = 0
+    memorize_mode = False
     estimator = None
     def __init__(self, parent = None):
         super(ShowVideo, self).__init__(parent)
@@ -35,6 +37,9 @@ class ShowVideo(QtCore.QObject):
                 res_image = self.get_access(image)
             elif self.mode == 1:
                 res_image = self.face_recog(image)
+
+            if self.memorize_mode:
+                res_image = self.memorize(res_image)
 
             if res_image is not None:
                 color_swapped_image = cv2.cvtColor(res_image, cv2.COLOR_BGR2RGB)
@@ -65,6 +70,22 @@ class ShowVideo(QtCore.QObject):
                         (255, 0, 0),
                         1)
         return image
+
+    def memorize(self, image):
+        h = 280
+        w = 200
+        height, width, _ = image.shape
+        if height <= h or width <= w:
+            print ("Incorrect height or width of memorize window")
+            return
+        height_top_bot_corner = int((height - h) / 2)
+        width_left_right_corner = int((width - w) / 2)
+        cv2.rectangle(image, (0, 0), (width, height_top_bot_corner), (0,0,0),cv2.FILLED) # top corner
+        cv2.rectangle(image, (0, height_top_bot_corner), (width_left_right_corner, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # left corner
+        cv2.rectangle(image, (0, height - height_top_bot_corner), (width, height), (0,0,0), cv2.FILLED) # botton corner
+        cv2.rectangle(image, (width - width_left_right_corner, height_top_bot_corner), (width, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # right corner
+        return image
+
 
 
 class ImageViewer(QtWidgets.QWidget):
@@ -111,12 +132,13 @@ class ImageViewer(QtWidgets.QWidget):
 
 class Window(QtWidgets.QMainWindow):
 
-    def __init__(self):
+    def __init__(self, stop_work_threads_func):
         QtWidgets.QWidget.__init__(self)
-
+        self.stop_work_threads_func = stop_work_threads_func
         self.image_viewer = ImageViewer()
         self.push_button1 = QtWidgets.QPushButton('Start')
         self.push_button2 = QtWidgets.QPushButton('Stop')
+        self.push_button3= QtWidgets.QPushButton('Memorize you')
 
         widget_1 = QtWidgets.QWidget()
         self.comboBox = QtWidgets.QComboBox(widget_1)
@@ -135,7 +157,7 @@ class Window(QtWidgets.QMainWindow):
         vertical_layout.addWidget(self.image_viewer)
         vertical_layout.addWidget(widget_1)
         vertical_layout.addWidget(self.push_button1)
-        vertical_layout.addWidget(self.push_button1)
+        vertical_layout.addWidget(self.push_button3)
         vertical_layout.addWidget(self.push_button2)
 
         layout_widget = QtWidgets.QWidget()
@@ -143,14 +165,19 @@ class Window(QtWidgets.QMainWindow):
 
         self.setCentralWidget(layout_widget)
 
+    def closeEvent(self, event):
+        self.stop_work_threads_func()
+        time.sleep(0.3)
+        event.accept()
+
 
 class App(QtCore.QObject):
     def __init__(self, parent=None):
         super(self.__class__, self).__init__(parent)
-
-        self.gui = Window()
-        self.vid = ShowVideo()
         self.thread = QtCore.QThread()
+        self.gui = Window(lambda : self.stop())
+        self.vid = ShowVideo()
+
         self.vid.moveToThread(self.thread)
         self.thread.start()
 
@@ -162,12 +189,18 @@ class App(QtCore.QObject):
         self.gui.comboBox.currentIndexChanged.connect(self.change)
         self.gui.push_button1.clicked.connect(self.vid.startVideo)
         self.gui.push_button2.clicked.connect(self.stop)
+        self.gui.push_button3.clicked.connect(self.change_memorize_mode)
 
     def change(self, i):
         #self.gui.label.setText(str(i))
         self.vid.mode = i
+
     def stop(self):
         self.vid.run_video = False
+        self.thread.quit()
+
+    def change_memorize_mode(self):
+        self.vid.memorize_mode = not self.vid.memorize_mode
 
 if __name__ == '__main__':
     main_app = QtWidgets.QApplication(sys.argv)
