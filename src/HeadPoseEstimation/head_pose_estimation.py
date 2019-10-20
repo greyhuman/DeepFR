@@ -71,6 +71,7 @@ class HeadPoseEstimator:
         # 1. detect face;
         # 2. detect landmarks;
         # 3. estimate pose
+        direction = "unknown"
         mask = np.zeros_like(frame)
         if (self.sumErr[0] == -1 or self.checkErr(self.sumErr, self.errCap)):
             #print (cnt)
@@ -116,7 +117,7 @@ class HeadPoseEstimator:
                     pose = self.pose_estimator.solve_pose_by_68_points(marks)
                     self.hpe += time.clock() - t
 
-                    self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
+                    direction = self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
                 else:
                     if (len(landmarks) > 0):
                         marks = np.array(landmarks[0])
@@ -124,7 +125,7 @@ class HeadPoseEstimator:
                         self.mark_detector.draw_marks(
                             frame, marks, color=(0, 255, 0))
                         pose = self.pose_estimator.solve_pose_by_5_points(marks)
-                        self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
+                        direction = self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
 
         else:
             self.cnt += 1
@@ -196,13 +197,13 @@ class HeadPoseEstimator:
             pose = self.pose_estimator.solve_pose_by_68_points(marks)
             self.hpe += time.clock() - t
 
-            self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
+            direction = self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
 
         self.old_frame = clean_frame
         # Show preview.
         #img = cv2.add(frame, mask)
         #cv2.imshow('frame', frame)
-        return frame
+        return (frame, direction, self.old_facebox)
         # cv2.imshow("Preview", frame)
         '''if cv2.waitKey(10) == 27:
             break'''
@@ -217,10 +218,10 @@ class HeadPoseEstimator:
                 stabile_pose.append(ps_stb.state[0])
             stabile_pose = np.reshape(stabile_pose, (-1, 3))
 
-            pose_estimator.draw_annotation_box(
+            return pose_estimator.draw_annotation_box(
                 frame, stabile_pose[0], stabile_pose[1], color=(128, 255, 128))
         else:
-            pose_estimator.draw_annotation_box(
+            return pose_estimator.draw_annotation_box(
                 frame, pose[0], pose[1], color=(255, 128, 128))
 
 

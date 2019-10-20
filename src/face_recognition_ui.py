@@ -20,6 +20,13 @@ class ShowVideo(QtCore.QObject):
     estimator = None
     known_face_encoding = []
     known_face_names = []
+    main_facebox = None
+    current_direction = "unknown"
+    head_directions = ["RIGHT", "LEFT", "STRAIGHT ON", "DOWN", "UP"]
+    msgs_directions = ["Turn your head right", "Turn your head left", "Look straight on", "Tilt your head down", "Put your head up"]
+    status_direction = 0
+    cropped_h = 320
+    cropped_w = 280
 
     def __init__(self, parent = None):
         super(ShowVideo, self).__init__(parent)
@@ -41,15 +48,17 @@ class ShowVideo(QtCore.QObject):
         if self.estimator is None:
             self.estimator = HeadPoseEstimator(sample_image)
 
-        face_encoding_templ, name_templ = self.add_person("/home/anastasiia/Documents/DeepFR/Nastya_train_12.jpg",
+        '''face_encoding_templ, name_templ = self.add_person("/home/anastasiia/Documents/DeepFR/Nastya_train_12.jpg",
                                                           "NASTYA")
         self.known_face_encoding.append(face_encoding_templ)
-        self.known_face_names.append(name_templ)
+        self.known_face_names.append(name_templ)'''
 
         while self.run_video:
             ret, image = self.camera.read()
             if ret is False:
                 break
+            if self.memorize_mode:
+                image = self.crop_image(image)
             res_image = None
             if self.mode == 0:
                 res_image = self.get_access(image)
@@ -72,30 +81,34 @@ class ShowVideo(QtCore.QObject):
             else:
                 break
     def get_access(self, image):
-        image = self.estimator.get_direction(image)
+        image, self.current_direction, faceboxes = self.estimator.get_direction(image)
+        self.main_facebox = faceboxes[0] if len(faceboxes) >= 1 else None
         return image
 
     def face_recog(self, image):
         faceboxes, landmarks = self.estimator.face_detector.get_faceboxes(image)
         facebox = faceboxes[0] if len(faceboxes) >= 1 else None
         if facebox is not None:
+            self.main_facebox = facebox
             l = landmarks[0]
             upd_facebox = [[int(facebox[1]), int(facebox[2]), int(facebox[3]), int(facebox[0])]]
-            face_encodings = faceRecognition.face_encodings(image, l, upd_facebox)
-        
-            matches = faceRecognition.compare_faces(self.known_face_encoding, face_encodings[0], 0.47)
             name = "Unknown"
+            if self.known_face_encoding:
+                face_encodings = faceRecognition.face_encodings(image, l, upd_facebox)
 
-            '''
-            if True in matches:
-                first_match_index = matches.index(True)
-                name = self.known_face_names[first_match_index]
-            '''
+                matches = faceRecognition.compare_faces(self.known_face_encoding, face_encodings[0], 0.47)
 
-            face_distances = faceRecognition.face_distance(self.known_face_encoding, face_encodings[0])
-            best_match_index = np.argmin(face_distances)
-            if matches[best_match_index]:
-                name = self.known_face_names[best_match_index]
+                '''
+                if True in matches:
+                    first_match_index = matches.index(True)
+                    name = self.known_face_names[first_match_index]
+                '''
+
+
+                face_distances = faceRecognition.face_distance(self.known_face_encoding, face_encodings[0])
+                best_match_index = np.argmin(face_distances)
+                if matches[best_match_index]:
+                    name = self.known_face_names[best_match_index]
             cv2.rectangle(image,
                           (int(facebox[0]), int(facebox[1])),
                           (int(facebox[2]), int(facebox[3])), (0, 255, 0))
@@ -106,18 +119,76 @@ class ShowVideo(QtCore.QObject):
         return image
 
     def memorize(self, image):
-        h = 280
-        w = 200
+        if self.main_facebox is None:
+            return image
         height, width, _ = image.shape
-        if height <= h or width <= w:
+        #print(self.main_facebox)
+        area_facebox = (self.main_facebox[2] - self.main_facebox[0]) * (self.main_facebox[3] - self.main_facebox[1])
+        area_image = self.cropped_h * self.cropped_w
+        percent = ( area_facebox / area_image ) * 100
+        cv2.putText(image, str(percent), (int(0), height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 0, 0),
+                    1)
+
+        ht = int((height - self.cropped_h) / 2)
+        wt = int((width - self.cropped_w) / 2)
+        #print("r=" + str(self.r_ok) + " | l=" + str(self.l_ok) + " | s=" + str(self.s_ok))
+        #print("dir=" + self.current_direction)
+        if percent > 50 and percent < 75:
+            if self.next_step(0):
+                self.write_image_step(image, ht, wt, 1)
+            elif self.next_step(1):
+                self.write_image_step(image, ht, wt, 2)
+            elif self.next_step(2):
+                self.write_image_step(image, ht, wt, 3)
+            elif self.next_step(3):
+                self.write_image_step(image, ht, wt, 4)
+            elif self.next_step(4):
+                self.write_image_step(image, ht, wt, 5)
+            else:
+                cv2.putText(image, "Bad direction", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (0, 0, 255),
+                            1)
+        else:
+            cv2.putText(image, "Area bad", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (0, 0, 255),
+                        1)
+        if self.status_direction != 5:
+            cv2.putText(image, self.msgs_directions[self.status_direction], (int(width / 3), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (255, 0, 0),
+                        1)
+        #cv2.rectangle(image, (0, 0), (width, height_top_bot_corner), (0,0,0),cv2.FILLED) # top corner
+        #cv2.rectangle(image, (0, height_top_bot_corner), (width_left_right_corner, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # left corner
+        #cv2.rectangle(image, (0, height - height_top_bot_corner), (width, height), (0,0,0), cv2.FILLED) # botton corner
+        #cv2.rectangle(image, (width - width_left_right_corner, height_top_bot_corner), (width, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # right corner
+        #image = image[height_top_bot_corner:height_top_bot_corner+h, width_left_right_corner:width_left_right_corner+w]
+        return image
+
+    def next_step(self, ok):
+        return self.current_direction == self.head_directions[ok] and self.status_direction == ok
+
+    def write_image_step(self, image, ht, wt, ok):
+        print(self.head_directions[ok - 1])
+        time.sleep(2)
+        cv2.imwrite("/tmp/" + self.head_directions[ok - 1].lower() + ".jpg", image[ht:ht+self.cropped_h, wt:wt+self.cropped_w])
+        self.status_direction = ok
+
+    def crop_image(self, image):
+        height, width, _ = image.shape
+        if height <= self.cropped_h or width <= self.cropped_w:
             print ("Incorrect height or width of memorize window")
             return
-        height_top_bot_corner = int((height - h) / 2)
-        width_left_right_corner = int((width - w) / 2)
-        cv2.rectangle(image, (0, 0), (width, height_top_bot_corner), (0,0,0),cv2.FILLED) # top corner
-        cv2.rectangle(image, (0, height_top_bot_corner), (width_left_right_corner, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # left corner
-        cv2.rectangle(image, (0, height - height_top_bot_corner), (width, height), (0,0,0), cv2.FILLED) # botton corner
-        cv2.rectangle(image, (width - width_left_right_corner, height_top_bot_corner), (width, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # right corner
+        height_top_bot_corner = int((height - self.cropped_h) / 2)
+        width_left_right_corner = int((width - self.cropped_w) / 2)
+        #cv2.rectangle(image, (0, 0), (width, height_top_bot_corner), (0,0,0),cv2.FILLED) # top corner
+        #cv2.rectangle(image, (0, height_top_bot_corner), (width_left_right_corner, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # left corner
+        #cv2.rectangle(image, (0, height - height_top_bot_corner), (width, height), (0,0,0), cv2.FILLED) # botton corner
+        #cv2.rectangle(image, (width - width_left_right_corner, height_top_bot_corner), (width, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # right corner
+        image[0:height_top_bot_corner, 0:width] = 255
+        image[height_top_bot_corner:height_top_bot_corner + self.cropped_h, 0:width_left_right_corner] = 255
+        image[height - height_top_bot_corner:height, 0:width] = 255
+        image[height_top_bot_corner:height_top_bot_corner + self.cropped_h, width - width_left_right_corner:width] = 255
+        #image = image[height_top_bot_corner:height_top_bot_corner+h, width_left_right_corner:width_left_right_corner+w]
         return image
 
 
