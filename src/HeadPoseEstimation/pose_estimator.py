@@ -8,9 +8,9 @@ import cv2
 class PoseEstimator:
     """Estimate head pose according to the facial landmarks"""
 
-    def __init__(self, p1 = 0, p2 = 68, img_size=(480, 640)):
+    def __init__(self, p1 = 0, p2 = 68, img_size=(480, 640), enable_draw = False):
         self.size = img_size
-
+        self.enable_draw = enable_draw
         # 3D model points.
         self.model_points = np.array([
             (0.0, 0.0, 0.0),             # Nose tip
@@ -226,13 +226,14 @@ class PoseEstimator:
 
         #cv2.polylines(image, [pts2d], True, (255, 0, 0), line_width, cv2.LINE_AA)
         # Draw all the lines
-        cv2.polylines(image, [point_2d], True, color, line_width, cv2.LINE_AA)
-        cv2.line(image, tuple(point_2d[1]), tuple(
-            point_2d[6]), color, line_width, cv2.LINE_AA)
-        cv2.line(image, tuple(point_2d[2]), tuple(
-            point_2d[7]), color, line_width, cv2.LINE_AA)
-        cv2.line(image, tuple(point_2d[3]), tuple(
-            point_2d[8]), color, line_width, cv2.LINE_AA)
+        if self.enable_draw:
+            cv2.polylines(image, [point_2d], True, color, line_width, cv2.LINE_AA)
+            cv2.line(image, tuple(point_2d[1]), tuple(
+                point_2d[6]), color, line_width, cv2.LINE_AA)
+            cv2.line(image, tuple(point_2d[2]), tuple(
+                point_2d[7]), color, line_width, cv2.LINE_AA)
+            cv2.line(image, tuple(point_2d[3]), tuple(
+                point_2d[8]), color, line_width, cv2.LINE_AA)
         return self.solve_direction(image, angle_lr, angle_ud)
 
     def solve_direction(self, image, angle_lr, angle_ud):
