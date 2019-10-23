@@ -8,9 +8,9 @@ import cv2
 class PoseEstimator:
     """Estimate head pose according to the facial landmarks"""
 
-    def __init__(self, p1 = 0, p2 = 68, img_size=(480, 640)):
+    def __init__(self, p1 = 0, p2 = 68, img_size=(480, 640), enable_draw = False):
         self.size = img_size
-
+        self.enable_draw = enable_draw
         # 3D model points.
         self.model_points = np.array([
             (0.0, 0.0, 0.0),             # Nose tip
@@ -178,8 +178,8 @@ class PoseEstimator:
         pts2d = np.int32(pts2d.reshape(-1, 2))
 
         diff_lr = pts2d[0][0] - pts2d[1][0]
-        ancle_lr = math.atan(diff_lr / 100)
-        ancle_lr = ancle_lr * 180 / math.pi
+        angle_lr = math.atan(diff_lr / 100)
+        angle_lr = angle_lr * 180 / math.pi
 
         pts2d00str = str(pts2d[0][0])
         pts2d10str = str(pts2d[1][0])
@@ -187,10 +187,10 @@ class PoseEstimator:
         cv2.putText(image, pts2dstr, (520, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (0, 0, 255),
                     1)
-        text_lr = str(ancle_lr)
+        text_lr = str(angle_lr)
         col_lr = (0, 0, 255)
 
-        '''if (ancle_lr > 40):
+        '''if (angle_lr > 40):
             text_lr = "OUT"
             col_lr = (0, 0, 255)
         else:
@@ -198,8 +198,8 @@ class PoseEstimator:
             col_lr = (0, 255, 0)'''
 
         diff_ud = pts2d[0][1] - pts2d[1][1]
-        ancle_ud = math.atan(diff_ud / 100)
-        ancle_ud = ancle_ud * 180 / math.pi
+        angle_ud = math.atan(diff_ud / 100)
+        angle_ud = angle_ud * 180 / math.pi
         pts2d01str = str(pts2d[0][1])
         pts2d11str = str(pts2d[1][1])
         pts2d1str = pts2d01str + "," + pts2d11str
@@ -207,34 +207,16 @@ class PoseEstimator:
                     (0, 255, 0),
                     1)
 
-        text_ud = str(ancle_ud)
+        text_ud = str(angle_ud)
         col_ud = (0, 255, 0)
 
-        '''if (ancle_ud > 40):
+        '''if (angle_ud > 40):
             text_ud = "OUT"
             col_ud = (0, 0, 255)
         else:
             text_ud = "IN"
             col_ud = (0, 255, 0)'''
 
-        th_lr = 18
-        th_ud = 18
-        if (ancle_lr <= th_lr and ancle_lr >= -th_lr and ancle_ud >= 30):
-            textdir = "UP"
-        elif (ancle_lr <= th_lr and ancle_lr >= -th_lr and ancle_ud <= -33):
-            textdir = "DOWN"
-        elif (ancle_ud <= th_ud and ancle_ud >= -th_ud and ancle_lr >= 35):
-            textdir = "RIGHT"
-        elif (ancle_ud <= th_ud and ancle_ud >= -th_ud and ancle_lr <= -35):
-            textdir = "LEFT"
-        elif (ancle_ud <= th_ud and ancle_ud >= -th_ud and ancle_lr <= th_lr and ancle_lr >= -th_lr):
-            textdir = "STRAIGHT ON"
-        else:
-            textdir = "unknown"
-
-        cv2.putText(image, textdir, (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (255, 0, 0),
-                    1)
         cv2.putText(image, text_lr, (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     col_lr,
                     1)
@@ -244,13 +226,37 @@ class PoseEstimator:
 
         #cv2.polylines(image, [pts2d], True, (255, 0, 0), line_width, cv2.LINE_AA)
         # Draw all the lines
-        cv2.polylines(image, [point_2d], True, color, line_width, cv2.LINE_AA)
-        cv2.line(image, tuple(point_2d[1]), tuple(
-            point_2d[6]), color, line_width, cv2.LINE_AA)
-        cv2.line(image, tuple(point_2d[2]), tuple(
-            point_2d[7]), color, line_width, cv2.LINE_AA)
-        cv2.line(image, tuple(point_2d[3]), tuple(
-            point_2d[8]), color, line_width, cv2.LINE_AA)
+        if self.enable_draw:
+            cv2.polylines(image, [point_2d], True, color, line_width, cv2.LINE_AA)
+            cv2.line(image, tuple(point_2d[1]), tuple(
+                point_2d[6]), color, line_width, cv2.LINE_AA)
+            cv2.line(image, tuple(point_2d[2]), tuple(
+                point_2d[7]), color, line_width, cv2.LINE_AA)
+            cv2.line(image, tuple(point_2d[3]), tuple(
+                point_2d[8]), color, line_width, cv2.LINE_AA)
+        return self.solve_direction(image, angle_lr, angle_ud)
+
+    def solve_direction(self, image, angle_lr, angle_ud):
+        th_lr = 20
+        th_ud = 20
+        textdir = None
+        if (angle_lr <= th_lr and angle_lr >= -th_lr and angle_ud >= 5):
+            textdir = "UP"
+        elif (angle_lr <= th_lr and angle_lr >= -th_lr and angle_ud <= -20):
+            textdir = "DOWN"
+        elif (angle_ud <= th_ud and angle_ud >= -th_ud and angle_lr >= 35):
+            textdir = "RIGHT"
+        elif (angle_ud <= th_ud and angle_ud >= -th_ud and angle_lr <= -35):
+            textdir = "LEFT"
+        elif (angle_ud <= th_ud and angle_ud >= -th_ud and angle_lr <= th_lr and angle_lr >= -th_lr):
+            textdir = "STRAIGHT ON"
+        else:
+            textdir = "unknown"
+
+        cv2.putText(image, textdir, (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 0, 0),
+                    1)
+        return textdir
 
     def get_pose_marks(self, marks):
         """Get marks ready for pose estimation from 68 marks"""

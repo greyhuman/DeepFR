@@ -8,7 +8,8 @@ import time
 import cv2
 
 class HeadPoseEstimator:
-    def __init__(self, sample_frame):
+    def __init__(self, sample_frame, enable_draw):
+        self.enable_draw = enable_draw
         # Parameters for lucas kanade optical flow
         self.lk_params = dict(winSize=(50, 50),
                          maxLevel=4,
@@ -26,7 +27,7 @@ class HeadPoseEstimator:
         # Introduce pose estimator to solve pose. Get one frame to setup the
         # estimator according to the image size.
         height, width = sample_frame.shape[:2]
-        self.pose_estimator = PoseEstimator(p1=self.p_st, p2=self.p_end, img_size=(height, width))
+        self.pose_estimator = PoseEstimator(p1=self.p_st, p2=self.p_end, img_size=(height, width), enable_draw=self.enable_draw)
 
         # Introduce scalar stabilizers for pose.
         self.pose_stabilizers = [Stabilizer(
@@ -71,6 +72,7 @@ class HeadPoseEstimator:
         # 1. detect face;
         # 2. detect landmarks;
         # 3. estimate pose
+        direction = "unknown"
         mask = np.zeros_like(frame)
         if (self.sumErr[0] == -1 or self.checkErr(self.sumErr, self.errCap)):
             #print (cnt)
@@ -91,9 +93,10 @@ class HeadPoseEstimator:
             self.fd += time.clock() - t
 
             if facebox is not None:
-                cv2.rectangle(frame,
-                              (int(facebox[0][0]), int(facebox[0][1])),
-                              (int(facebox[0][2]), int(facebox[0][3])), (0, 255, 0))
+                if self.enable_draw:
+                    cv2.rectangle(frame,
+                                  (int(facebox[0][0]), int(facebox[0][1])),
+                                  (int(facebox[0][2]), int(facebox[0][3])), (0, 255, 0))
                 t = time.clock()
 
 
@@ -108,23 +111,25 @@ class HeadPoseEstimator:
                     self.p0 = np.reshape(self.p0, (len(self.p0), 1, 2))
 
                     # Uncomment following line to show raw marks.
-                    self.mark_detector.draw_marks(
-                       frame, marks, color=(0, 255, 0))
+                    if self.enable_draw:
+                        self.mark_detector.draw_marks(
+                           frame, marks, color=(0, 255, 0))
 
                     # Try pose estimation with 68 points.
                     t = time.clock()
                     pose = self.pose_estimator.solve_pose_by_68_points(marks)
                     self.hpe += time.clock() - t
 
-                    self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
+                    direction = self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
                 else:
                     if (len(landmarks) > 0):
                         marks = np.array(landmarks[0])
                         # Uncomment following line to show raw marks.
-                        self.mark_detector.draw_marks(
-                            frame, marks, color=(0, 255, 0))
+                        if self.enable_draw:
+                            self.mark_detector.draw_marks(
+                               frame, marks, color=(0, 255, 0))
                         pose = self.pose_estimator.solve_pose_by_5_points(marks)
-                        self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
+                        direction = self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
 
         else:
             self.cnt += 1
@@ -196,13 +201,13 @@ class HeadPoseEstimator:
             pose = self.pose_estimator.solve_pose_by_68_points(marks)
             self.hpe += time.clock() - t
 
-            self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
+            direction = self.draw_pose(frame, pose, self.pose_estimator, self.pose_stabilizers, True)
 
         self.old_frame = clean_frame
         # Show preview.
         #img = cv2.add(frame, mask)
         #cv2.imshow('frame', frame)
-        return frame
+        return (frame, direction, self.old_facebox)
         # cv2.imshow("Preview", frame)
         '''if cv2.waitKey(10) == 27:
             break'''
@@ -217,10 +222,10 @@ class HeadPoseEstimator:
                 stabile_pose.append(ps_stb.state[0])
             stabile_pose = np.reshape(stabile_pose, (-1, 3))
 
-            pose_estimator.draw_annotation_box(
+            return pose_estimator.draw_annotation_box(
                 frame, stabile_pose[0], stabile_pose[1], color=(128, 255, 128))
         else:
-            pose_estimator.draw_annotation_box(
+            return pose_estimator.draw_annotation_box(
                 frame, pose[0], pose[1], color=(255, 128, 128))
 
 
