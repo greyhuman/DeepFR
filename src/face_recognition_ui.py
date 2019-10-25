@@ -15,12 +15,14 @@ import faceRecognition
 APP_ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
 
 class Memorize(QtCore.QObject):
-    state_change_signal = QtCore.pyqtSignal(int)
+    state_change_signal = QtCore.pyqtSignal(str, int)
     current_direction = "unknown"
     head_directions = ["RIGHT", "LEFT", "STRAIGHT ON", "DOWN", "UP"]
     msgs_directions = ["Turn your head right", "Turn your head left", "Look straight on", "Tilt your head down", "Put your head up"]
     state_imgs = {}
     status_direction = 0
+    start_point_time = -1.0
+    diff_time = 2.0
     cropped_h = 320
     cropped_w = 280
 
@@ -43,6 +45,7 @@ class Memorize(QtCore.QObject):
         wt = int((width - self.cropped_w) / 2)
         #print("r=" + str(self.r_ok) + " | l=" + str(self.l_ok) + " | s=" + str(self.s_ok))
         #print("dir=" + self.current_direction)
+        msg = None
         if percent > 45 and percent < 90:
             if self.next_step(0):
                 self.write_image_step(image, ht, wt, 1)
@@ -55,15 +58,23 @@ class Memorize(QtCore.QObject):
             elif self.next_step(4):
                 self.write_image_step(image, ht, wt, 5)
             else:
-                cv2.putText(image, "Bad direction", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                '''cv2.putText(image, "Bad direction", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                             (0, 0, 255),
-                            1)
+                            1)'''
+                self.reset_wait_step()
         else:
-            cv2.putText(image, "Area bad", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+            msg = "Put your face in the frame"
+            '''cv2.putText(image, "Area bad", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                         (0, 0, 255),
-                        1)
-        if self.status_direction != 5:
-            cv2.putText(image, self.msgs_directions[self.status_direction], (int(width / 3), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        1)'''
+            self.reset_wait_step()
+        if self.status_direction != 5 and msg == None:
+            msg = self.msgs_directions[self.status_direction]
+            '''cv2.putText(image, self.msgs_directions[self.status_direction], (int(width / 3), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (255, 0, 0),
+                        1)'''
+        if msg != None:
+            cv2.putText(image, msg, (int(width / 3), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                         (255, 0, 0),
                         1)
         #cv2.rectangle(image, (0, 0), (width, height_top_bot_corner), (0,0,0),cv2.FILLED) # top corner
@@ -73,6 +84,11 @@ class Memorize(QtCore.QObject):
         #image = image[height_top_bot_corner:height_top_bot_corner+h, width_left_right_corner:width_left_right_corner+w]
         return image
 
+    def reset_wait_step(self):
+        #print("Reset")
+        self.state_change_signal.emit('r', self.status_direction)
+        self.start_point_time = -1.0
+
     def next_step(self, ok):
         return self.current_direction == self.head_directions[ok] and self.status_direction == ok
 
@@ -80,11 +96,24 @@ class Memorize(QtCore.QObject):
         #print(self.head_directions[ok - 1])
         #time.sleep(2)
         #cv2.imwrite("/tmp/" + self.head_directions[ok - 1].lower() + ".jpg", image[ht:ht+self.cropped_h, wt:wt+self.cropped_w])
-        thread = Thread(target=lambda: [time.sleep(1),
-            self.state_imgs.update({self.head_directions[ok - 1].lower() : image[ht:ht+self.cropped_h, wt:wt+self.cropped_w]}),
-            self.change_status_direction(ok),
-            self.state_change_signal.emit(ok - 1)])
-        thread.start()
+        if self.start_point_time == -1.0:
+            self.start_point_time = time.time()
+            #print("start time")
+            self.state_change_signal.emit('y', ok - 1)
+            return
+        cur_time = time.time()
+
+        if cur_time - self.start_point_time > self.diff_time:
+            #print("OK - 3 sec")
+            '''thread = Thread(target=lambda: [
+                self.state_imgs.update({self.head_directions[ok - 1].lower() : image[ht:ht+self.cropped_h, wt:wt+self.cropped_w]}),
+                self.change_status_direction(ok),
+                self.state_change_signal.emit('g', ok - 1)])
+            thread.start()'''
+            self.state_imgs.update({self.head_directions[ok - 1].lower() : image[ht:ht+self.cropped_h, wt:wt+self.cropped_w]})
+            self.change_status_direction(ok)
+            self.state_change_signal.emit('g', ok - 1)
+            self.start_point_time = -1.0
         #state_imgs.update({self.head_directions[ok - 1].lower() : image[ht:ht+self.cropped_h, wt:wt+self.cropped_w]})
         #self.state_change_signal.emit(ok - 1)
         #self.status_direction = ok
@@ -158,16 +187,14 @@ class ShowVideo(QtCore.QObject):
             ret, image = self.camera.read()
             if ret is False:
                 break
-            if self.memorize_mode:
-                image = self.memorize_module.crop_image(image)
             res_image = None
             if self.mode == 0:
-                res_image = self.get_access(image)
+                res_image = self.memorize_module.crop_image(image)
+                res_image = self.get_access(res_image)
+                if self.memorize_mode:
+                    res_image = self.memorize_module.memorize(res_image, self.current_facebox)
             elif self.mode == 1:
                 res_image = self.face_recog(image)
-
-            if self.memorize_mode:
-                res_image = self.memorize_module.memorize(res_image, self.current_facebox)
 
             if res_image is not None:
                 color_swapped_image = cv2.cvtColor(res_image, cv2.COLOR_BGR2RGB)
@@ -268,16 +295,17 @@ class Window(QtWidgets.QMainWindow):
         QtWidgets.QWidget.__init__(self)
         self.stop_work_threads_func = stop_work_threads_func
         self.image_viewer = ImageViewer()
-        self.push_button1 = QtWidgets.QPushButton('Start')
-        self.push_button2 = QtWidgets.QPushButton('Stop')
+        #self.push_button1 = QtWidgets.QPushButton('Start')
+        #self.push_button2 = QtWidgets.QPushButton('Stop')
         self.push_button3 = QtWidgets.QPushButton('Memorize me')
-
+        self.push_button3.setDisabled(True)
         widget_1 = QtWidgets.QWidget()
         self.comboBox = QtWidgets.QComboBox(widget_1)
         self.comboBox.setGeometry(QtCore.QRect(80, 190, 85, 27))
         self.comboBox.setObjectName("selectMode")
         self.comboBox.addItem("Get access")
         self.comboBox.addItem("Face recognition mode")
+        self.comboBox.setDisabled(True)
         self.horizontal_layout = QtWidgets.QHBoxLayout(widget_1)
         self.horizontal_layout.addWidget(self.comboBox)
         #self.label = QtWidgets.QLabel(widget_1)
@@ -295,6 +323,8 @@ class Window(QtWidgets.QMainWindow):
         self.pixmap_r = self.pixmap_r.scaled(14, 14)
         self.pixmap_g = QtGui.QPixmap("/".join([img_folger, 'clipartGreen.png']))
         self.pixmap_g = self.pixmap_g.scaled(14, 14)
+        self.pixmap_y = QtGui.QPixmap("/".join([img_folger, 'clipartYellow.png']))
+        self.pixmap_y = self.pixmap_y.scaled(14, 14)
 
         self.l_user_name = QtWidgets.QLabel('User name ')
         self.l_r = QtWidgets.QLabel()
@@ -304,6 +334,7 @@ class Window(QtWidgets.QMainWindow):
         self.l_u = QtWidgets.QLabel()
         self.reset_memorize_gui()
         self.set_visible_memorize_gui(False)
+        self.change_index_event(mode=0)
         self.horizontal_layout_f = QtWidgets.QHBoxLayout(widget_2)
         self.horizontal_layout_f.addWidget(self.l_user_name)
         self.horizontal_layout_f.addWidget(self.user_name)
@@ -318,9 +349,9 @@ class Window(QtWidgets.QMainWindow):
         vertical_layout.addWidget(self.image_viewer)
         vertical_layout.addWidget(widget_2)
         vertical_layout.addWidget(widget_1)
-        vertical_layout.addWidget(self.push_button1)
+        #vertical_layout.addWidget(self.push_button1)
         vertical_layout.addWidget(self.push_button3)
-        vertical_layout.addWidget(self.push_button2)
+        #vertical_layout.addWidget(self.push_button2)
 
         layout_widget = QtWidgets.QWidget()
         layout_widget.setLayout(vertical_layout)
@@ -336,6 +367,34 @@ class Window(QtWidgets.QMainWindow):
         self.l_d.setPixmap(self.pixmap_r)
         self.l_u.setPixmap(self.pixmap_r)
 
+    def set_state_for(self, name_state, signal_id):
+        cur_signal = None
+        pixmap = None
+        if signal_id == 0:
+            cur_signal = self.l_r
+        elif signal_id == 1:
+            cur_signal = self.l_l
+        elif signal_id == 2:
+            cur_signal = self.l_s
+        elif signal_id == 3:
+            cur_signal = self.l_d
+        elif signal_id == 4:
+            cur_signal = self.l_u
+        else:
+            return
+
+        if name_state == 'g':
+            pixmap = self.pixmap_g
+        elif name_state == 'r':
+            pixmap = self.pixmap_r
+        elif name_state == 'y':
+            pixmap = self.pixmap_y
+        else:
+            return
+
+        cur_signal.setPixmap(pixmap)
+
+
     def set_visible_memorize_gui(self, value):
         self.user_name.setVisible(value)
         self.set_name_button.setVisible(value)
@@ -346,6 +405,14 @@ class Window(QtWidgets.QMainWindow):
         self.l_u.setVisible(value)
         self.l_user_name.setVisible(value)
 
+    def change_index_event(self, mode):
+        if mode != 0:
+            self.push_button3.setVisible(False)
+            self.set_visible_memorize_gui(False)
+            return
+        self.push_button3.setVisible(True)
+
+
     def closeEvent(self, event):
         self.stop_work_threads_func()
         time.sleep(0.3)
@@ -353,10 +420,13 @@ class Window(QtWidgets.QMainWindow):
 
 
 class App(QtCore.QObject):
+    start_video_signal = QtCore.pyqtSignal()
     def __init__(self, parent=None):
         super(self.__class__, self).__init__(parent)
+        self.init_video_stream = False
         self.save_prefix = '/tmp/'
         self.thread = QtCore.QThread()
+
         self.gui = Window(lambda : self.stop_all())
         self.vid = ShowVideo()
 
@@ -364,20 +434,34 @@ class App(QtCore.QObject):
         self.thread.start()
 
         self.connect_signs()
+
         self.gui.show()
+        self.start_video_signal.emit()
 
     def connect_signs(self):
         self.vid.VideoSignal.connect(self.gui.image_viewer.setImage)
-        self.gui.comboBox.currentIndexChanged.connect(self.change)
-        self.gui.push_button1.clicked.connect(self.vid.startVideo)
-        self.gui.push_button2.clicked.connect(self.stop)
+        self.vid.VideoSignal.connect(self.start_video_stream)
+        self.gui.comboBox.currentIndexChanged.connect(self.change_index)
+        #self.gui.push_button1.clicked.connect(self.vid.startVideo)
+        self.start_video_signal.connect(self.vid.startVideo)
+        #self.gui.push_button2.clicked.connect(self.stop)
         self.gui.push_button3.clicked.connect(self.change_memorize_mode)
         self.gui.set_name_button.clicked.connect(self.save_images)
         self.vid.memorize_module.state_change_signal.connect(self.change_state)
 
-    def change(self, i):
+    def start_video_stream(self, image):
+        if not self.init_video_stream:
+            gui = self.gui
+            gui.push_button3.setDisabled(False)
+            gui.comboBox.setDisabled(False)
+            self.init_video_stream = True
+
+    def change_index(self, i):
         #self.gui.label.setText(str(i))
         self.vid.mode = i
+        if i == 0:
+            self.vid.memorize_mode = False
+        self.gui.change_index_event(i)
 
     def stop(self):
         self.vid.run_video = False
@@ -386,18 +470,11 @@ class App(QtCore.QObject):
         self.stop()
         self.thread.quit()
 
-    def change_state(self, ind):
+    def change_state(self, str_, ind):
         gui = self.gui
-        if ind == 0:
-            gui.l_r.setPixmap(gui.pixmap_g)
-        elif ind == 1:
-            gui.l_l.setPixmap(gui.pixmap_g)
-        elif ind == 2:
-            gui.l_s.setPixmap(gui.pixmap_g)
-        elif ind == 3:
-            gui.l_d.setPixmap(gui.pixmap_g)
-        elif ind == 4:
-            gui.l_u.setPixmap(gui.pixmap_g)
+        gui.set_state_for(str_, ind)
+        #print("set state for " + str_ + " , index = " + str(ind))
+        if ind == 4 and str_ == 'g':
             gui.user_name.setDisabled(False)
             gui.set_name_button.setDisabled(False)
 
@@ -408,16 +485,15 @@ class App(QtCore.QObject):
         for key, value in memorize_module.state_imgs.items():
             file_name = key + "_" + gui.user_name.text() + ".jpg"
             cv2.imwrite(os.path.join(self.save_prefix, file_name), value)
+            face_encoding_templ, name_templ = vid.add_person(os.path.join(self.save_prefix, file_name),
+                                                              gui.user_name.text())
+            if name_templ:
+                vid.known_face_encoding.append(face_encoding_templ)
+                vid.known_face_names.append(name_templ)
+            else:
+                print("Couldn't add a new person")
         memorize_module.reset()
         gui.reset_memorize_gui()
-        file_name_straight = "straight on_" + gui.user_name.text() + ".jpg"
-        face_encoding_templ, name_templ = vid.add_person(os.path.join(self.save_prefix, file_name_straight),
-                                                          gui.user_name.text())
-        if name_templ:
-            vid.known_face_encoding.append(face_encoding_templ)
-            vid.known_face_names.append(name_templ)
-        else:
-            print("Couldn't add a new person")
 
     def change_memorize_mode(self):
         self.vid.memorize_mode = not self.vid.memorize_mode
