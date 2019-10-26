@@ -25,9 +25,13 @@ class Memorize(QtCore.QObject):
     diff_time = 2.0
     cropped_h = 320
     cropped_w = 280
+    face_detector = None
 
     def __init__(self, parent = None):
         super(Memorize, self).__init__(parent)
+
+    def set_face_detector(self, fd):
+        self.face_detector = fd
 
     def memorize(self, image, current_fb):
         if current_fb is None:
@@ -45,8 +49,15 @@ class Memorize(QtCore.QObject):
         wt = int((width - self.cropped_w) / 2)
         #print("r=" + str(self.r_ok) + " | l=" + str(self.l_ok) + " | s=" + str(self.s_ok))
         #print("dir=" + self.current_direction)
+        if not self.check_image(image[ht:ht+self.cropped_h, wt:wt+self.cropped_w]):
+            cv2.putText(image, "a face can't be detected", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (0, 0, 255),
+                        1)
+            self.reset_wait_step()
+            return image
+
         msg = None
-        if percent > 45 and percent < 90:
+        if percent > 40 and percent < 90:
             if self.next_step(0):
                 self.write_image_step(image, ht, wt, 1)
             elif self.next_step(1):
@@ -83,6 +94,12 @@ class Memorize(QtCore.QObject):
         #cv2.rectangle(image, (width - width_left_right_corner, height_top_bot_corner), (width, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # right corner
         #image = image[height_top_bot_corner:height_top_bot_corner+h, width_left_right_corner:width_left_right_corner+w]
         return image
+
+    def check_image(self, img):
+        faceboxes, landmarks = self.face_detector.get_faceboxes(img)
+        facebox = faceboxes[0] if len(faceboxes) >= 1 else None
+        l = landmarks[0] if len(landmarks) >= 1 else None
+        return facebox and l
 
     def reset_wait_step(self):
         #print("Reset")
@@ -159,14 +176,21 @@ class ShowVideo(QtCore.QObject):
     def __init__(self, parent = None):
         super(ShowVideo, self).__init__(parent)
 
-    def add_person(self, img_path, name):
+    def add_person_by_image_path(self, img_path, name):
         img = faceRecognition.load_image_file(img_path)
         faceboxes, landmarks = self.estimator.face_detector.get_faceboxes(img)
         facebox = faceboxes[0] if len(faceboxes) >= 1 else None
         l = landmarks[0] if len(landmarks) >= 1 else None
-        if facebox and l:
+        if not facebox:
+            print("bad facebox")
+        if not l:
+            print("bad landmark")
+        return self.add_person(img, facebox, l, name)
+
+    def add_person(self, img, facebox, landmarks, name):
+        if facebox and landmarks:
             upd_facebox = [[int(facebox[1]), int(facebox[2]), int(facebox[3]), int(facebox[0])]]
-            my_face_encoding = faceRecognition.face_encodings(img, l, upd_facebox)[0]
+            my_face_encoding = faceRecognition.face_encodings(img, landmarks, upd_facebox)[0]
             return my_face_encoding, name
         return None, None
 
@@ -177,6 +201,7 @@ class ShowVideo(QtCore.QObject):
 
         if self.estimator is None:
             self.estimator = HeadPoseEstimator(sample_frame=sample_image, enable_draw=False)
+            self.memorize_module.set_face_detector(self.estimator.face_detector)
 
         '''face_encoding_templ, name_templ = self.add_person("/home/anastasiia/Documents/DeepFR/Nastya_train_12.jpg",
                                                           "NASTYA")
@@ -483,15 +508,19 @@ class App(QtCore.QObject):
         memorize_module = self.vid.memorize_module
         vid = self.vid
         for key, value in memorize_module.state_imgs.items():
+            #print("key =" + key)
+            #print("value =" + str(value))
             file_name = key + "_" + gui.user_name.text() + ".jpg"
             cv2.imwrite(os.path.join(self.save_prefix, file_name), value)
-            face_encoding_templ, name_templ = vid.add_person(os.path.join(self.save_prefix, file_name),
-                                                              gui.user_name.text())
+            face_encoding_templ, name_templ = vid.add_person_by_image_path(img_path=os.path.join(self.save_prefix, file_name),
+                                                                           name=gui.user_name.text())
+            #face_encoding_templ, name_templ = vid.add_person(value[0], value[1], value[2],
+            #                                                  gui.user_name.text())
             if name_templ:
                 vid.known_face_encoding.append(face_encoding_templ)
                 vid.known_face_names.append(name_templ)
             else:
-                print("Couldn't add a new person")
+                print(key + ": Couldn't add a new person")
         memorize_module.reset()
         gui.reset_memorize_gui()
 
