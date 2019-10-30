@@ -22,9 +22,10 @@ class Memorize(QtCore.QObject):
     state_imgs = {}
     status_direction = 0
     start_point_time = -1.0
-    diff_time = 2.0
+    diff_time = 0.8
     cropped_h = 320
     cropped_w = 280
+    border = 30
     face_detector = None
 
     def __init__(self, parent = None):
@@ -41,17 +42,17 @@ class Memorize(QtCore.QObject):
         area_facebox = (current_fb[2] - current_fb[0]) * (current_fb[3] - current_fb[1])
         area_image = self.cropped_h * self.cropped_w
         percent = ( area_facebox / area_image ) * 100
-        cv2.putText(image, str(percent), (int(0), height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (255, 0, 0),
-                    1)
 
-        ht = int((height - self.cropped_h) / 2)
-        wt = int((width - self.cropped_w) / 2)
+
+        ht = int((height - self.cropped_h) / 2 )
+        wt = int((width - self.cropped_w) / 2 )
         #print("r=" + str(self.r_ok) + " | l=" + str(self.l_ok) + " | s=" + str(self.s_ok))
         #print("dir=" + self.current_direction)
-        if not self.check_image(image[ht:ht+self.cropped_h, wt:wt+self.cropped_w]):
-            cv2.putText(image, "a face can't be detected", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (0, 0, 255),
+
+
+        if not self.check_image(image[ht - self.border:ht + self.cropped_h + self.border, wt - self.border:wt + self.cropped_w + self.border]):
+            cv2.putText(image, "Put your face closer to the frame's center", (int(width / 3), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (255, 0, 0),
                         1)
             self.reset_wait_step()
             return image
@@ -59,15 +60,15 @@ class Memorize(QtCore.QObject):
         msg = None
         if percent > 40 and percent < 90:
             if self.next_step(0):
-                self.write_image_step(image, ht, wt, 1)
+                self.write_image_step(image, 1)
             elif self.next_step(1):
-                self.write_image_step(image, ht, wt, 2)
+                self.write_image_step(image, 2)
             elif self.next_step(2):
-                self.write_image_step(image, ht, wt, 3)
+                self.write_image_step(image, 3)
             elif self.next_step(3):
-                self.write_image_step(image, ht, wt, 4)
+                self.write_image_step(image, 4)
             elif self.next_step(4):
-                self.write_image_step(image, ht, wt, 5)
+                self.write_image_step(image, 5)
             else:
                 '''cv2.putText(image, "Bad direction", (int(0), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                             (0, 0, 255),
@@ -79,6 +80,8 @@ class Memorize(QtCore.QObject):
                         (0, 0, 255),
                         1)'''
             self.reset_wait_step()
+
+
         if self.status_direction != 5 and msg == None:
             msg = self.msgs_directions[self.status_direction]
             '''cv2.putText(image, self.msgs_directions[self.status_direction], (int(width / 3), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
@@ -88,6 +91,9 @@ class Memorize(QtCore.QObject):
             cv2.putText(image, msg, (int(width / 3), height - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                         (255, 0, 0),
                         1)
+        cv2.putText(image, str(percent), (int(0), height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 0, 0),
+                    1)
         #cv2.rectangle(image, (0, 0), (width, height_top_bot_corner), (0,0,0),cv2.FILLED) # top corner
         #cv2.rectangle(image, (0, height_top_bot_corner), (width_left_right_corner, height_top_bot_corner + h), (0,0,0),cv2.FILLED) # left corner
         #cv2.rectangle(image, (0, height - height_top_bot_corner), (width, height), (0,0,0), cv2.FILLED) # botton corner
@@ -97,8 +103,19 @@ class Memorize(QtCore.QObject):
 
     def check_image(self, img):
         faceboxes, landmarks = self.face_detector.get_faceboxes(img)
-        facebox = faceboxes[0] if len(faceboxes) >= 1 else None
-        l = landmarks[0] if len(landmarks) >= 1 else None
+        facebox = None
+        l = None
+
+        if len(faceboxes) >= 1:
+            facebox = faceboxes[0]
+        #else:
+        #    print("Null facebox")
+
+        if len(landmarks) >= 1:
+            l = landmarks[0]
+        #else:
+        #    print("Null landmarks")
+
         return facebox and l
 
     def reset_wait_step(self):
@@ -109,13 +126,13 @@ class Memorize(QtCore.QObject):
     def next_step(self, ok):
         return self.current_direction == self.head_directions[ok] and self.status_direction == ok
 
-    def write_image_step(self, image, ht, wt, ok):
+    def write_image_step(self, image, ok):
         #print(self.head_directions[ok - 1])
         #time.sleep(2)
         #cv2.imwrite("/tmp/" + self.head_directions[ok - 1].lower() + ".jpg", image[ht:ht+self.cropped_h, wt:wt+self.cropped_w])
         if self.start_point_time == -1.0:
             self.start_point_time = time.time()
-            #print("start time")
+            #print("start time")image[ht - 20 :ht+self.cropped_h + 20, wt - 20 :wt+self.cropped_w + 20]
             self.state_change_signal.emit('y', ok - 1)
             return
         cur_time = time.time()
@@ -127,7 +144,11 @@ class Memorize(QtCore.QObject):
                 self.change_status_direction(ok),
                 self.state_change_signal.emit('g', ok - 1)])
             thread.start()'''
-            self.state_imgs.update({self.head_directions[ok - 1].lower() : image[ht:ht+self.cropped_h, wt:wt+self.cropped_w]})
+            height, width, _ = image.shape
+            ht = int((height - self.cropped_h) / 2 )
+            wt = int((width - self.cropped_w) / 2 )
+
+            self.state_imgs.update({self.head_directions[ok - 1].lower() : image[ht - self.border:ht + self.cropped_h + self.border, wt - self.border:wt + self.cropped_w + self.border]})
             self.change_status_direction(ok)
             self.state_change_signal.emit('g', ok - 1)
             self.start_point_time = -1.0
@@ -142,7 +163,7 @@ class Memorize(QtCore.QObject):
         self.current_direction = "unknown"
         self.state_imgs.clear()
 
-    def crop_image(self, image):
+    def crop_image_with_fill(self, image):
         height, width, _ = image.shape
         if height <= self.cropped_h or width <= self.cropped_w:
             print ("Incorrect height or width of memorize window")
@@ -214,10 +235,10 @@ class ShowVideo(QtCore.QObject):
                 break
             res_image = None
             if self.mode == 0:
-                res_image = self.memorize_module.crop_image(image)
-                res_image = self.get_access(res_image)
+                res_image = self.memorize_module.crop_image_with_fill(image)
                 if self.memorize_mode:
                     res_image = self.memorize_module.memorize(res_image, self.current_facebox)
+                res_image = self.get_access(res_image)
             elif self.mode == 1:
                 res_image = self.face_recog(image)
 
@@ -449,7 +470,6 @@ class App(QtCore.QObject):
     def __init__(self, parent=None):
         super(self.__class__, self).__init__(parent)
         self.init_video_stream = False
-        self.save_prefix = '/tmp/'
         self.thread = QtCore.QThread()
 
         self.gui = Window(lambda : self.stop_all())
@@ -480,6 +500,8 @@ class App(QtCore.QObject):
             gui.push_button3.setDisabled(False)
             gui.comboBox.setDisabled(False)
             self.init_video_stream = True
+            self.load_all_ds_images()
+
 
     def change_index(self, i):
         #self.gui.label.setText(str(i))
@@ -507,12 +529,14 @@ class App(QtCore.QObject):
         gui = self.gui
         memorize_module = self.vid.memorize_module
         vid = self.vid
+        user_folder = os.path.join(APP_ROOT_PATH, 'assets/dataset/' + gui.user_name.text())
+        os.mkdir(user_folder)
         for key, value in memorize_module.state_imgs.items():
             #print("key =" + key)
             #print("value =" + str(value))
-            file_name = key + "_" + gui.user_name.text() + ".jpg"
-            cv2.imwrite(os.path.join(self.save_prefix, file_name), value)
-            face_encoding_templ, name_templ = vid.add_person_by_image_path(img_path=os.path.join(self.save_prefix, file_name),
+            file_name = key + ".jpg"
+            cv2.imwrite(os.path.join(user_folder, file_name), value)
+            face_encoding_templ, name_templ = vid.add_person_by_image_path(img_path=os.path.join(user_folder, file_name),
                                                                            name=gui.user_name.text())
             #face_encoding_templ, name_templ = vid.add_person(value[0], value[1], value[2],
             #                                                  gui.user_name.text())
@@ -523,6 +547,31 @@ class App(QtCore.QObject):
                 print(key + ": Couldn't add a new person")
         memorize_module.reset()
         gui.reset_memorize_gui()
+
+    def load_images_by_name(self, username):
+        vid = self.vid
+        username = username[0]
+        user_folder = os.path.join(APP_ROOT_PATH, 'assets/dataset/' + username)
+        onlyfiles = [f for f in os.listdir(user_folder) if os.path.isfile(os.path.join(user_folder, f))]
+        for file_name in onlyfiles:
+            print("img path = " +os.path.join(user_folder, file_name))
+            print("user_name = " + username)
+            face_encoding_templ, name_templ = vid.add_person_by_image_path(img_path=os.path.join(user_folder, file_name),
+                                                                           name=username)
+            #face_encoding_templ, name_templ = vid.add_person(value[0], value[1], value[2],
+            #                                                  gui.user_name.text())
+            if name_templ:
+                vid.known_face_encoding.append(face_encoding_templ)
+                vid.known_face_names.append(name_templ)
+            else:
+                print(key + ": Couldn't add a new person")
+
+    def load_all_ds_images(self):
+        ds_folder = os.path.join(APP_ROOT_PATH, 'assets/dataset/')
+        dirs_name = [x[1] for x in os.walk(ds_folder) if x[1]]
+
+        for dir_name in dirs_name:
+            self.load_images_by_name(dir_name)
 
     def change_memorize_mode(self):
         self.vid.memorize_mode = not self.vid.memorize_mode
