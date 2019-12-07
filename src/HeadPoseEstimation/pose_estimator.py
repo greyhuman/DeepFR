@@ -242,11 +242,11 @@ class PoseEstimator:
         textdir = None
         if (angle_lr <= th_lr and angle_lr >= -th_lr and angle_ud >= 5):
             textdir = "UP"
-        elif (angle_lr <= th_lr and angle_lr >= -th_lr and angle_ud <= -20):
+        elif (angle_lr <= th_lr and angle_lr >= -th_lr and angle_ud <= -16):
             textdir = "DOWN"
-        elif (angle_ud <= th_ud and angle_ud >= -th_ud and angle_lr >= 35):
+        elif (angle_ud <= th_ud and angle_ud >= -th_ud and angle_lr >= 26):
             textdir = "RIGHT"
-        elif (angle_ud <= th_ud and angle_ud >= -th_ud and angle_lr <= -35):
+        elif (angle_ud <= th_ud and angle_ud >= -th_ud and angle_lr <= -26):
             textdir = "LEFT"
         elif (angle_ud <= th_ud and angle_ud >= -th_ud and angle_lr <= th_lr and angle_lr >= -th_lr):
             textdir = "STRAIGHT ON"

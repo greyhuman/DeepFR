@@ -23,10 +23,13 @@ class FaceDetector:
         min_shape = min(image.shape[1], image.shape[0])
         scale = int(min_shape / 80)
         img = cv2.resize(image, (int(image.shape[1] / scale),int(image.shape[0] / scale)))
+
         raw_boxes, raw_marks = detect_face.detect_face(img, self.minsize, self.pnet, self.rnet, self.onet, self.threshold, self.factor)
 
         if len(raw_marks) > 0:
             raw_marks = np.reshape(raw_marks, (raw_marks.shape[1], raw_marks.shape[0]))
+        else:
+            return [],[]
 
         faceboxes = []
         landmarks = []
