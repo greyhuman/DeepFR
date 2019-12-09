@@ -262,35 +262,37 @@ class ShowVideo(QtCore.QObject):
 
     def face_recog(self, image):
         faceboxes, landmarks = self.estimator.face_detector.get_faceboxes(image)
-        facebox = faceboxes[0] if len(faceboxes) >= 1 else None
-        if facebox is not None:
-            self.current_facebox = facebox
-            l = landmarks[0]
-            upd_facebox = [[int(facebox[1]), int(facebox[2]), int(facebox[3]), int(facebox[0])]]
-            name = "Unknown"
-            if self.known_face_encoding:
-                face_encodings = faceRecognition.face_encodings(image, l, upd_facebox)
+        # facebox = faceboxes[0] if len(faceboxes) >= 1 else None
+        for i in range(len(faceboxes)):
+            facebox = faceboxes[i]
+            if facebox is not None:
+                self.current_facebox = facebox
+                l = landmarks[i]
+                upd_facebox = [[int(facebox[1]), int(facebox[2]), int(facebox[3]), int(facebox[0])]]
+                name = "Unknown"
+                if self.known_face_encoding:
+                    face_encodings = faceRecognition.face_encodings(image, l, upd_facebox)
 
-                matches = faceRecognition.compare_faces(self.known_face_encoding, face_encodings[0], 0.47)
+                    matches = faceRecognition.compare_faces(self.known_face_encoding, face_encodings[0], 0.55)
 
-                '''
-                if True in matches:
-                    first_match_index = matches.index(True)
-                    name = self.known_face_names[first_match_index]
-                '''
+                    '''
+                    if True in matches:
+                        first_match_index = matches.index(True)
+                        name = self.known_face_names[first_match_index]
+                    '''
 
 
-                face_distances = faceRecognition.face_distance(self.known_face_encoding, face_encodings[0])
-                best_match_index = np.argmin(face_distances)
-                if matches[best_match_index]:
-                    name = self.known_face_names[best_match_index]
-            cv2.rectangle(image,
-                          (int(facebox[0]), int(facebox[1])),
-                          (int(facebox[2]), int(facebox[3])), (0, 255, 0))
-            dist = math.fabs(int(facebox[0]) - int(facebox[2])) / 3
-            cv2.putText(image, name, (int(facebox[0] + dist), int(facebox[1] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (255, 0, 0),
-                        1)
+                    face_distances = faceRecognition.face_distance(self.known_face_encoding, face_encodings[0])
+                    best_match_index = np.argmin(face_distances)
+                    if matches[best_match_index]:
+                        name = self.known_face_names[best_match_index]
+                cv2.rectangle(image,
+                              (int(facebox[0]), int(facebox[1])),
+                              (int(facebox[2]), int(facebox[3])), (0, 255, 0))
+                dist = math.fabs(int(facebox[0]) - int(facebox[2])) / 3
+                cv2.putText(image, name, (int(facebox[0] + dist), int(facebox[1] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (255, 0, 0),
+                            1)
         return image
 
 class ImageViewer(QtWidgets.QWidget):
